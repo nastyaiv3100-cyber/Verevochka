@@ -155,10 +155,8 @@ input[type=text],input[type=url],input[type=number],textarea,select{border-color
    <div class="rangeField"><label class="label" for="lives">Количество жизней</label><div class="rangeRow"><input id="lives" type="range" min="1" max="8" step="1"><output></output></div></div>
    <label class="switch"><input id="soundStart" type="checkbox"><span>Включать звук при старте</span></label>
   </div></details>
-  <details class="section"><summary>🎨 Цвета и шрифт</summary><div class="inside">
-   <div class="two"><div class="field"><label>Основной акцент</label><div class="colorField"><input id="accentA" type="color"><span class="help">кнопки и эффекты</span></div></div><div class="field"><label>Второй акцент</label><div class="colorField"><input id="accentB" type="color"><span class="help">градиенты и прогресс</span></div></div></div>
-   <div class="two"><div class="field"><label>Цвет верёвки (резерв)</label><div class="colorField"><input id="ropeColor" type="color"><span class="help">для линий без картинки</span></div></div><div class="field"><label>Цвет текста</label><div class="colorField"><input id="textColor" type="color"><span class="help">основной текст</span></div></div></div>
-  </div></details>
+  <!-- Retain palette values for existing JSON projects, autosave and exports. -->
+  <div hidden aria-hidden="true"><input id="accentA" type="color"><input id="accentB" type="color"><input id="ropeColor" type="color"><input id="textColor" type="color"></div>
   <details class="section"><summary>✏️ Черновик</summary><div class="inside">
    <p class="help">Поле для заметок и вычислений. Ученик рисует карандашом прямо в игре.</p>
    <div class="field"><label><input type="checkbox" id="draftEnabled" checked> Включить черновик</label></div>
@@ -230,7 +228,7 @@ const loseSection=BASE_GAME.split('<div class="overlay" id="overOverlay">')[1]?.
 const winSection=BASE_GAME.split('<div class="overlay" id="winOverlay">')[1]||'';
 $('loseTitle').value=(loseSection.match(/<h1>([\s\S]*?)<\/h1>/)||[])[1]||'';
 $('winTitle').value=(winSection.match(/<h1>([\s\S]*?)<\/h1>/)||[])[1]||'';
-$('againButton').value=(loseSection.match(/<button[^>]*>([\s\S]*?)<\/button>/)||[])[1]||'Заново!';
+$('againButton').value=(loseSection.match(/<button\b[^>]*\bid="restartBtn"[^>]*>([\s\S]*?)<\/button>/)||[])[1]||'Заново!';
 $('accentA').value=(BASE_GAME.match(/--accentA:\s*(#[0-9a-fA-F]{6})/)||[])[1]||'#ffb830';
 $('accentB').value=(BASE_GAME.match(/--accentB:\s*(#[0-9a-fA-F]{6})/)||[])[1]||'#ff7a00';
 $('ropeColor').value=(BASE_GAME.match(/--rope-color:\s*(#[0-9a-fA-F]{6})/)||[])[1]||'#c8780a';

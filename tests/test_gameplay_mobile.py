@@ -97,6 +97,7 @@ class GameplayMobileTest(unittest.TestCase):
                 for _ in range(3):
                     page.get_by_role("button", name="Нет", exact=True).click()
                 page.locator("#overOverlay.show").wait_for(state="visible")
+                self.assertEqual(page.locator("#restartBtn").inner_text(), "Заново!")
                 self.assert_reachable(page, "#restartBtn")
                 self.assert_reachable(page, "#goBackBtn")
                 page.locator("#goBackBtn").click()
