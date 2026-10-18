@@ -235,10 +235,10 @@ class LightenCodeTest(unittest.TestCase):
                     expected_text = export_tests.FIRST_QUESTION
                 else:
                     self.editor.locator("#modeQuick").click()
-                    self.editor.locator("#quickQuestions").fill("[INPUT] Новый вопрос (кот)\n[OPEN] Что ты видишь?")
+                    self.editor.locator("#quickQuestions").fill(f"[CHOICE] {export_tests.FIRST_QUESTION} | кот | собака\n[CHOICE] {export_tests.SECOND_QUESTION} | Да ✓ | Нет")
                     self.editor.locator("#applyQuickQuestions").click()
-                    expected_type = "input"
-                    expected_text = "Новый вопрос"
+                    expected_type = "choice"
+                    expected_text = export_tests.FIRST_QUESTION
                 edited = self.settings()["questions"][0]
                 self.assertEqual(edited["type"], expected_type)
                 self.assertEqual(edited["q"], expected_text)
@@ -248,6 +248,8 @@ class LightenCodeTest(unittest.TestCase):
                 self.assertEqual(restored["image"], images["png"])
                 self.assertEqual(restored["type"], expected_type)
                 self.assertEqual(restored["q"], expected_text)
+                if operation == "quick":
+                    self.assertEqual(restored["a"], ["кот", "собака"])
                 self.assertFalse(self.editor.locator("#undoLightenCode").is_visible())
 
     def test_animation_and_failed_images_are_untouched_while_other_images_shrink(self):
