@@ -184,7 +184,9 @@
   if(includeDraft&&typeof getQuestionEditorErrors==='function')errors.push(...getQuestionEditorErrors());
   return [...new Set(errors)];
  }
+ let readyExportSettings='';
  function showExportErrors(errors){
+  readyExportSettings='';
   $('copyGeniallyCode').disabled=true;$('downloadGame').disabled=true;$('openHtmlPreview').disabled=true;
   $('geniallyEmbedCode').value='';$('gameFileSize').textContent='Нужна проверка заданий';$('gameSizeStatus').textContent=errors.join(' ');
   $('geniallyWarningTitle').textContent='Исправьте задания перед экспортом.';$('geniallyWarningText').textContent=errors.join(' ');$('geniallyWarning').hidden=false;
@@ -211,7 +213,11 @@
   const errors=questionErrors();
   if(errors.length){exportBuildSequence++;showExportErrors(errors);return}
   $('downloadGame').disabled=false;$('openHtmlPreview').disabled=false;
-  return previousUpdateExport(html);
+  const settings=JSON.stringify(readSettings());
+  if(settings===readyExportSettings&&$('geniallyEmbedCode').value&&!$('copyGeniallyCode').disabled)return;
+  const preparing=previousUpdateExport(html),run=exportBuildSequence;
+  await preparing;
+  if(run===exportBuildSequence)readyExportSettings=$('geniallyEmbedCode').value&&!$('copyGeniallyCode').disabled?settings:'';
  };
  const previousRefreshExport=refreshExportSummary;
  refreshExportSummary=async function(){
@@ -226,13 +232,21 @@
  };
  window.copyGeniallyCode=async()=>{
   if(!window.canExportProject())return;
-  if(!await refreshExportSummary())return;
-  const area=$('geniallyEmbedCode'),code=area.value;
+  const area=$('geniallyEmbedCode');
+  // Start native copying in the click's user gesture, without rebuilding a
+  // current iframe first. Async packing can otherwise consume that gesture.
+  const ready=area.value&&!$('copyGeniallyCode').disabled&&readyExportSettings===JSON.stringify(readSettings());
+  if(!ready&&!await refreshExportSummary())return;
+  const code=area.value;
   if(!code){toast('Код для Genially пока недоступен. Проверьте сообщение в разделе экспорта.');return}
-  try{
-   if(!navigator.clipboard?.writeText)throw new Error('Clipboard unavailable');
-   await navigator.clipboard.writeText(code);toast('iframe-код скопирован.');return;
-  }catch(e){}
+  if(!ready&&($('copyGeniallyCode').disabled||readyExportSettings!==JSON.stringify(readSettings()))){
+   toast('Код обновляется. Дождитесь готовности и нажмите «Скопировать iframe» ещё раз.');return;
+  }
+  if(ready)try{
+    if(!navigator.clipboard?.writeText)throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(code);toast('iframe-код скопирован.');return;
+   }catch(e){}
+  if(area.value!==code){toast('Код обновляется. Дождитесь готовности и нажмите «Скопировать iframe» ещё раз.');return}
   area.focus();area.select();area.setSelectionRange(0,area.value.length);
   let copied=false;
   try{copied=document.execCommand('copy')===true}catch(e){}
