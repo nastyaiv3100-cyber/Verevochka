@@ -2,10 +2,12 @@
 
 import base64
 import copy
+import gzip
 import json
 import struct
 import unittest
 import zlib
+from urllib.parse import urlsplit
 
 import test_genially_export as export_tests
 
@@ -194,6 +196,55 @@ class LightenCodeTest(unittest.TestCase):
         self.assertEqual(undone["theme"]["titleImageData"], images["jpeg"], "Undo must preserve a new image uploaded after optimization")
         self.assertEqual(undone["questions"][0]["image"], images["png"])
         self.assertFalse(self.editor.locator("#undoLightenCode").is_visible())
+
+    def test_both_lighten_buttons_leave_the_current_iframe_ready_for_copy(self):
+        self.open_editor()
+        original = self.images()["png"]
+        self.editor.evaluate("""() => {
+            window.__copiedFrames = [];
+            window.__fallbackCopies = [];
+            Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{
+                writeText(text) {
+                    const synchronous = window.__copyInvocationActive === true;
+                    window.__copiedFrames.push({text, synchronous});
+                    return synchronous ? Promise.resolve() :
+                        Promise.reject(new DOMException('Click activation was lost', 'NotAllowedError'));
+                }
+            }});
+            document.execCommand = command => { window.__fallbackCopies.push(command); return false; };
+            const originalCopy = window.copyGeniallyCode;
+            window.copyGeniallyCode = function() {
+                // A clipboard write must start before the click handler yields
+                // to image compression/export work and loses browser activation.
+                window.__copyInvocationActive = true;
+                try { return originalCopy.apply(this, arguments); }
+                finally { window.__copyInvocationActive = false; }
+            };
+        }""")
+        for selector in ["#lightenCode", "#lightenCodeExport"]:
+            with self.subTest(button=selector):
+                self.import_settings({"theme": {"titleImageData": original}})
+                before = self.export_code()
+                self.lighten(selector)
+                optimized = self.settings()["theme"]["titleImageData"]
+                self.assertNotEqual(optimized, original)
+                # Do not call export_code(): it would refresh the export again
+                # and hide the reported post-optimization readiness regression.
+                self.assertTrue(self.editor.locator("#copyGeniallyCode").is_enabled())
+                code = self.editor.locator("#geniallyEmbedCode").input_value()
+                self.assertNotEqual(code, before)
+                self.editor.locator("#copyGeniallyCode").click()
+                self.editor.wait_for_function("document.querySelector('#toast').textContent.includes('скопирован')")
+                copied = self.editor.evaluate("window.__copiedFrames.at(-1)")
+                self.assertEqual(copied, {"text": code, "synchronous": True})
+                self.assertEqual(self.editor.evaluate("window.__fallbackCopies"), [])
+                source = self.editor.evaluate("""code => new DOMParser().parseFromString(code, 'text/html')
+                    .querySelector('iframe').getAttribute('src')""", copied["text"])
+                fragment = urlsplit(source).fragment
+                encoded = fragment.split("=", 1)[1]
+                packed = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+                payload = gzip.decompress(packed) if fragment.startswith("z=") else packed
+                self.assertEqual(json.loads(payload)["theme"]["titleImageData"], optimized)
 
     def test_undo_restores_images_from_two_successful_optimization_passes(self):
         self.open_editor()

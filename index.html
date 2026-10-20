@@ -191,7 +191,7 @@ input[type=text],input[type=url],input[type=number],textarea,select{border-color
   <section class="editorMainPane hidden" data-editor-pane="export">
    <div class="section"><h2>Экспорт игры</h2><div class="inside">
     <div class="exportSizeCard"><b>Вес скачиваемого HTML</b><strong id="gameFileSize">Подсчитываю…</strong><span id="gameSizeStatus" class="help"></span><span class="help">Настройки для iframe: <b id="embedPayloadSize">—</b></span><small class="help">В Genially можно использовать загруженные картинки и звуки. Кнопка «Облегчить код» уменьшает крупные картинки до 1280×720 и переводит их в WebP, сохраняя пропорции и прозрачность. Исходные картинки можно вернуть до загрузки другого проекта; анимация, звуки и ссылки сохраняются.</small></div>
-    <div class="exportWarning" id="geniallyWarning" hidden><b id="geniallyWarningTitle">Размер настроек для iframe превышен.</b><span id="geniallyWarningText">Скачайте HTML игры: в нём настройки и вложения уже собраны вместе.</span></div>
+    <div class="exportWarning" id="geniallyWarning" hidden><b id="geniallyWarningTitle">Большой код для Genially.</b><span id="geniallyWarningText">Код доступен для копирования. Чтобы уменьшить его, нажмите «Облегчить код».</span></div>
     <div class="exportButtons"><button type="button" class="btn primary" id="copyGeniallyCode" disabled>Скопировать iframe</button><button type="button" class="btn" id="lightenCodeExport">Облегчить код</button><button type="button" class="btn" id="downloadGame">Скачать HTML</button></div>
     <label class="field" for="geniallyEmbedCode"><span>Код iframe для Genially</span><textarea id="geniallyEmbedCode" class="codeOutput" readonly placeholder="После проверки заданий здесь появится код. Его можно выделить и скопировать вручную."></textarea></label>
     
@@ -248,8 +248,8 @@ $('showTitlePage').checked=true;$('cardWidth').value=780;$('cardHeight').value=0
 $('soundStart').checked=/sound:\s*true/.test(BASE_GAME);
 function setEditorTab(name){document.querySelectorAll('[data-editor-tab]').forEach(b=>b.classList.toggle('active',b.dataset.editorTab===name));document.querySelectorAll('[data-editor-pane]').forEach(p=>p.classList.toggle('hidden',p.dataset.editorPane!==name));if(name==='export')refreshExportSummary()}document.querySelectorAll('input,select,textarea').forEach(el=>el.addEventListener(el.type==='file'?'change':'input',()=>{if(document.querySelector('[data-editor-pane=\"export\"]:not(.hidden)'))refreshExportSummary()}));document.querySelectorAll('[data-editor-tab]').forEach(b=>b.addEventListener('click',()=>setEditorTab(b.dataset.editorTab)));
 function formatFileSize(bytes){return bytes<1024*1024?`${(bytes/1024).toFixed(1)} КБ`:`${(bytes/1024/1024).toFixed(2)} МБ`}
-// Keep the embedded URL below 1 MiB; this is the editor's size guard.
-const MAX_EMBED_URL=1024*1024;
+// Warn about large embeds without preventing export or copying.
+const LARGE_EMBED_WARNING=1024*1024;
 function inferEngineUrl(){try{const here=new URL(location.href);if(here.protocol==='https:'||here.protocol==='http:')return new URL('game-engine.html',here).href}catch(e){}return ''}
 function encodeConfig(config){const bytes=new TextEncoder().encode(JSON.stringify(config));let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function encodeBytesUrl(bytes){let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
@@ -284,7 +284,7 @@ function geniallyEngineUrl(pack){
 async function makeGeniallyEmbed(pack){
  try{
   const url=geniallyEngineUrl(pack);
-  if(!url||url.protocol!=='https:'||url.href.length>MAX_EMBED_URL)return '';
+  if(!url||url.protocol!=='https:')return '';
   return `<iframe src="${esc(url.href)}" width="100%" height="600" style="border:0" allow="autoplay; fullscreen" allowfullscreen loading="lazy" title="Интерактивная игра"></iframe>`;
  }catch(e){return ''}
 }
@@ -310,13 +310,15 @@ async function updateExportInfo(gameHtml){
   const linkLength=url.href.length;
   $('embedPayloadSize').textContent=`ссылка ${linkLength.toLocaleString('ru-RU')} знаков`;
   $('gameSizeStatus').textContent='HTML готов к скачиванию.';
-  if(linkLength>MAX_EMBED_URL){
-   block('Код вставки слишком большой.','Общий размер настроек и вложений превысил лимит редактора: 1 МБ. Нажмите «Облегчить код», используйте прямые HTTPS-ссылки на файлы или скачайте HTML.');
-   return;
-  }
   const embed=await makeGeniallyEmbed(pack);
   if(run!==exportBuildSequence)return;
-  $('geniallyWarning').hidden=true;$('geniallyEmbedCode').value=embed;$('copyGeniallyCode').disabled=!embed;
+  $('geniallyEmbedCode').value=embed;$('copyGeniallyCode').disabled=!embed;
+  const large=linkLength>LARGE_EMBED_WARNING;
+  $('geniallyWarning').hidden=!large;
+  if(large){
+   $('geniallyWarningTitle').textContent='Большой код для Genially.';
+   $('geniallyWarningText').textContent=`Размер ссылки: ${formatFileSize(linkLength)}. Код доступен для копирования. Чтобы уменьшить его, нажмите «Облегчить код» или замените вложения HTTPS-ссылками.`;
+  }
  }catch(e){
   if(run!==exportBuildSequence)return;
   $('gameSizeStatus').textContent='Не удалось подготовить ссылку: '+e.message;
@@ -747,11 +749,12 @@ async function lightenCode(){
   const actualSize=packedLinkSize(await prepareGeniallyPayload(readSettings()));
   if(run!==imageOptimizationRun)return;
   const saving=Math.max(0,Math.round((1-actualSize/beforeSize)*100));
-  if(actualSize>MAX_EMBED_URL)notes.push('Для Genially код всё ещё превышает 1 МБ: уменьшите вложения или замените их ссылками.');
+  if(actualSize>LARGE_EMBED_WARNING)notes.push('Код для Genially всё ещё большой. Размер не ограничивает копирование.');
   $('lightenStatus').textContent=[`Сжато картинок: ${applied.length}. Код для Genially: ${formatFileSize(beforeSize)} → ${formatFileSize(actualSize)} (−${saving}%).`,...notes].join(' ');
  }catch(e){
   if(run===imageOptimizationRun)$('lightenStatus').textContent='Не удалось облегчить код. '+(e.message||'Попробуйте ещё раз.');
  }finally{
+  await refreshExportSummary();
   buttons.forEach(button=>{button.disabled=false;button.textContent='Облегчить код';button.removeAttribute('aria-busy')});
   $('undoLightenCode').disabled=false;
  }

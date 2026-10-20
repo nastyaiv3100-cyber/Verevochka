@@ -238,22 +238,41 @@ class GeniallyExportTest(unittest.TestCase):
         self.assertEqual(game.locator("#startOverlay h1").inner_text(), fragment_config["startTitle"])
         game.close()
 
-    def test_oversized_export_clears_previous_code_and_disables_copy(self):
+    def test_large_export_warns_without_blocking_or_truncating_the_iframe(self):
         self.open_editor()
         self.assertIn("<iframe", self.export_code())
-        # Incompressible user text makes a genuinely oversized export, rather
-        # than changing the production limit or stubbing the packing function.
+        # Incompressible user text exceeds the real warning threshold without
+        # changing production constants or stubbing the packing function.
         large_text = base64.b64encode(random.Random(314159).randbytes(1100000)).decode("ascii")
         self.import_settings({"startText": large_text})
         self.editor.wait_for_function("""() => {
             const warning = document.querySelector('#geniallyWarning');
-            return !warning.hidden && document.querySelector('#copyGeniallyCode').disabled;
+            return !warning.hidden && !document.querySelector('#copyGeniallyCode').disabled &&
+                document.querySelector('#geniallyEmbedCode').value.startsWith('<iframe');
         }""", timeout=30000)
-        self.assertEqual(self.editor.locator("#geniallyEmbedCode").input_value(), "")
-        self.assertIn("слишком", self.editor.locator("#geniallyWarningTitle").inner_text())
-        self.assertIn("HTML", self.editor.locator("#geniallyWarningText").inner_text())
+        code = self.editor.locator("#geniallyEmbedCode").input_value()
+        source = self.editor.evaluate("""code => new DOMParser()
+            .parseFromString(code, 'text/html').querySelector('iframe').getAttribute('src')""", code)
+        url = urlsplit(source)
+        self.assertGreater(len(source), 1024 * 1024)
+        self.assertEqual(url.query, "")
+        self.assertTrue(url.fragment.startswith("z="))
+        encoded = url.fragment.split("=", 1)[1]
+        payload = gzip.decompress(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+        self.assertEqual(json.loads(payload)["startText"], large_text)
+        self.assertRegex(self.editor.locator("#geniallyWarningTitle").inner_text().lower(), "больш")
+        self.assertIn("доступен для копирования", self.editor.locator("#geniallyWarningText").inner_text())
+        self.editor.evaluate("""() => {
+            window.__largeClipboard = null;
+            Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{
+                writeText(text) { window.__largeClipboard = text; return Promise.resolve(); }
+            }});
+        }""")
+        self.editor.locator("#copyGeniallyCode").click()
+        self.editor.wait_for_function("window.__largeClipboard !== null")
+        self.assertEqual(self.editor.evaluate("window.__largeClipboard"), code)
         self.assertTrue(self.editor.locator("#downloadGame").is_enabled())
-        # Returning below the limit must also recover from the warning state.
+        # Returning below the threshold clears the warning, too.
         self.import_settings({"startText": "Короткий текст"})
         self.assertIn("<iframe", self.export_code())
 
@@ -265,6 +284,23 @@ class GeniallyExportTest(unittest.TestCase):
         self.assertTrue(self.editor.locator("#copyGeniallyCode").is_disabled())
         self.assertEqual(self.editor.locator("#geniallyEmbedCode").input_value(), "")
         self.assertTrue(self.editor.locator("#downloadGame").is_enabled())
+
+    def test_large_uncompressed_fallback_is_also_available_with_a_warning(self):
+        self.open_editor(raw_fallback=True)
+        large_text = base64.b64encode(random.Random(271828).randbytes(650000)).decode("ascii")
+        self.import_settings({"startText": large_text})
+        self.editor.locator('[data-editor-tab="export"]').click()
+        self.editor.wait_for_function("""() => !document.querySelector('#copyGeniallyCode').disabled &&
+            !document.querySelector('#geniallyWarning').hidden""", timeout=30000)
+        code = self.editor.locator("#geniallyEmbedCode").input_value()
+        source = self.editor.evaluate("""code => new DOMParser().parseFromString(code, 'text/html')
+            .querySelector('iframe').getAttribute('src')""", code)
+        self.assertGreater(len(source), 1024 * 1024)
+        fragment = urlsplit(source).fragment
+        self.assertTrue(fragment.startswith("c="))
+        encoded = fragment.split("=", 1)[1]
+        payload = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        self.assertEqual(json.loads(payload)["startText"], large_text)
 
 
 if __name__ == "__main__":
