@@ -832,6 +832,12 @@ function buildGame(previewMode=false){const c=readSettings();let html=BASE_GAME;
  /* patch draft */
   html=html.replace(/const DRAFT_ENABLED = (?:true|false);/,`const DRAFT_ENABLED = ${c.draftEnabled};`);
   html=html.replace(/const DRAFT_BG = '(?:lines|grid)';/,`const DRAFT_BG = '${c.draftBg}';`);
+  // Editor screen switches bypass the game's start button, including after rebuilds.
+  html=html.replace('setOpen(false);setAvailable(!SHOW_TITLE_PAGE);\n      if(SHOW_TITLE_PAGE)startBtn.addEventListener("click",()=>requestAnimationFrame(()=>setAvailable(true)),{once:true});',`const overlays=[startOverlay,overOverlay,winOverlay];
+      function syncDraftAvailability(){setAvailable(overlays.every(overlay=>!overlay.classList.contains("show")))}
+      const availabilityObserver=new MutationObserver(syncDraftAvailability);
+      for(const overlay of overlays)availabilityObserver.observe(overlay,{attributes:true,attributeFilter:["class"]});
+      setOpen(false);syncDraftAvailability();`);
   html=html.replace(/const CELEBRATION_EFFECT = '[^']*';/,`const CELEBRATION_EFFECT = '${c.celebrationEffect}';\n    const CUSTOM_SOUND_EFFECTS = ${escapeScriptJson(c.soundEffects)};`);
   const themeCss=`<style id="userTheme">
 #startOverlay .startModal{background:${rgba(t.titleBg,alpha(t.titleTransparency))}!important;color:${t.titleBodyColor};border-color:${t.titleCardBorder||t.titleHeadingColor}!important;box-shadow:${neon(t.titleNeon,t.titleHeadingColor)}!important}#startOverlay .startModal h1{color:${t.titleHeadingColor}!important;font-family:${cssFont(t.titleFont)}!important;font-size:${t.titleHeadingSize}px!important;text-shadow:${t.titleNeon?`0 0 14px ${t.titleHeadingColor}`:'none'}!important}#startOverlay .startModal p{color:${t.titleBodyColor}!important;font-family:${cssFont(t.titleFont)}!important;font-size:${t.titleBodySize}px!important}#startOverlay #titleCat{width:min(${t.titleImageWidth}px,62vw)!important;height:min(${t.titleImageHeight}px,34vh)!important}#startOverlay #titleCat[hidden]{display:none!important}#startOverlay .cta{background:${t.titleButtonColor}!important;color:${t.titleButtonTextColor}!important;border:${Number(t.titleButtonBorderWidth)>0?Number(t.titleButtonBorderWidth)+'px solid '+(t.titleButtonBorder||'#271306'):'none'}!important;font-family:${cssFont(t.titleFont)}!important}
