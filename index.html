@@ -359,6 +359,18 @@ function questionDefault(type='choice'){
  if(type==='open')return{type,q:'Ответь устно'};
  return{type:'choice',q:'Новый вопрос',a:['Вариант 1','Вариант 2','Вариант 3'],correct:0}
 }
+// Carry the known answer when switching between choice and typed responses.
+function questionWithType(question,type){
+ const next=questionDefault(type);next.q=question.q;if(question.image)next.image=question.image;
+ if(next.type==='input'&&['choice','standard'].includes(question.type)){
+  const answer=Array.isArray(question.a)&&Number.isInteger(question.correct)?question.a[question.correct]:null;
+  if(typeof answer==='string'&&answer.trim())next.accepted=[answer];
+ }else if(next.type==='choice'&&question.type==='input'){
+  const answer=Array.isArray(question.accepted)?question.accepted.find(value=>typeof value==='string'&&value.trim()):null;
+  if(answer)next.a[0]=answer;
+ }
+ return next;
+}
 const questionEditor={mode:'quick',baseline:'',quickDirty:false,drafts:new Map()};
 function questionEditorChanged(){document.dispatchEvent(new Event('question-editor-change'))}
 function questionEditorStatus(message,error=false){$('quickStatus').textContent=message;$('quickStatus').classList.toggle('quickError',error)}
@@ -511,9 +523,10 @@ function showQuickParse(){
 }
 function applyQuickQuestions(){
  const text=$('quickQuestions').value,result=parseQuickQuestions(text);
- if(result.errors.length||!result.questions.length){questionEditorStatus(result.errors.join(' ')||'Добавьте хотя бы один вопрос.',true);return false}
+ if(result.errors.length){questionEditorStatus(result.errors.join(' '),true);return false}
  const sources=originalConfig.questions||[],used=new Set(),matches=new Map(),canonical=q=>quickLineForQuestion(q).trim();
- if(text.trim()!==sources.map(quickLineForQuestion).join('\n').trim()){
+ if(!text.trim())originalConfig.questions=[];
+ else if(text.trim()!==sources.map(quickLineForQuestion).join('\n').trim()){
   for(const key of [canonical,q=>`${q?.type==='standard'?'choice':q?.type}\0${q?.q}`]){
    result.questions.forEach((q,i)=>{
     if(matches.has(i))return;
@@ -527,7 +540,7 @@ function applyQuickQuestions(){
   originalConfig.questions=result.questions.map((q,i)=>{const source=sources[matches.get(i)];return source?{...source,...q}:q})
  }
  questionEditor.drafts.clear();questionEditor.quickDirty=false;questionEditor.baseline=text;syncQuickQuestionsFromCards(true);renderQuestions();
- questionEditorStatus(`Применено вопросов: ${originalConfig.questions.length}. Предпросмотр обновится автоматически.`);queuePreview();return true
+ questionEditorStatus(originalConfig.questions.length?`Применено вопросов: ${originalConfig.questions.length}. Предпросмотр обновится автоматически.`:'Список вопросов пуст. Добавьте вопрос в карточках или в общем окне.');queuePreview();return true
 }
 function fieldMarkup(label,value,cls=''){return `<label class="field ${cls}"><span>${esc(label)}</span><input type="text" value="${esc(value)}"></label>`}
 
@@ -554,13 +567,18 @@ function renderQuestions(){
   qImageUrl.addEventListener('input',()=>{const url=qImageUrl.value.trim();if(url)q.image=url;else if(/^https?:/i.test(q.image||''))delete q.image;qImagePreview.src=q.image||'';qImagePreview.hidden=!q.image;qImageClear.disabled=!q.image;qImageStatus.textContent=url?'HTTPS-ссылка останется в HTML и Genially.':'Для экспорта используйте прямую HTTPS-ссылку.';changed()});
   qImageFile.addEventListener('change',async ev=>{const file=ev.target.files?.[0];if(!file)return;if(!file.type.startsWith('image/')){toast('Выберите файл изображения.');return}try{const uri=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});if(!questions.includes(q))return;q.image=uri;qImageUrl.value='';qImagePreview.src=uri;qImagePreview.hidden=false;qImageClear.disabled=false;qImageStatus.textContent=`Добавлено: ${file.name} (${formatFileSize(file.size)}).`;changed()}catch{toast('Не удалось загрузить картинку.')}});
   qImageClear.addEventListener('click',()=>{delete q.image;qImagePreview.removeAttribute('src');qImagePreview.hidden=true;qImageFile.value='';qImageUrl.value='';qImageClear.disabled=true;qImageStatus.textContent='Картинка необязательна.';changed()});
-  card.querySelector('.qType').addEventListener('change',ev=>{const next=questionDefault(ev.target.value);next.q=q.q;if(q.image)next.image=q.image;questionEditor.drafts.delete(q);questions[index]=next;renderQuestions();queuePreview()});
+  card.querySelector('.qType').addEventListener('change',ev=>{
+   const next=questionWithType(q,ev.target.value);questionEditor.drafts.delete(q);questions[index]=next;renderQuestions();queuePreview();
+   if(next.type==='input')list.children[index]?.querySelector('.accepted')?.focus();
+  });
   card.querySelector('.up').addEventListener('click',()=>moveQuestion(index,-1));
   card.querySelector('.down').addEventListener('click',()=>moveQuestion(index,1));
-  card.querySelector('.delete').addEventListener('click',()=>{if(questions.length===1){toast('В игре должен остаться хотя бы один вопрос.');return}questionEditor.drafts.delete(q);questions.splice(index,1);renderQuestions();queuePreview()});
+  card.querySelector('.delete').addEventListener('click',()=>{questionEditor.drafts.delete(q);questions.splice(index,1);renderQuestions();queuePreview()});
   if(type==='input'){
-   specific.innerHTML=`<label class="field"><span>Допустимые ответы (через ;, дроби: 0,5)</span><input class="accepted" type="text" value="${esc((Array.isArray(q.accepted)?q.accepted:[]).join('; '))}"></label>`;
-   specific.querySelector('.accepted').addEventListener('input',ev=>{q.accepted=ev.target.value.split(';').map(v=>v.trim()).filter(Boolean);changed()})
+   specific.innerHTML=`<label class="field"><span>Допустимые ответы (через ;, дроби: 0,5)</span><input class="accepted" type="text" value="${esc((Array.isArray(q.accepted)?q.accepted:[]).join('; '))}"><small class="acceptedHint quickError" role="status">Введите хотя бы один правильный ответ, чтобы запустить предпросмотр и экспортировать игру.</small></label>`;
+   const accepted=specific.querySelector('.accepted'),hint=specific.querySelector('.acceptedHint');
+   const showAnswerHint=()=>{const missing=!Array.isArray(q.accepted)||!q.accepted.length||q.accepted.some(value=>typeof value!=='string'||!value.trim());accepted.setAttribute('aria-invalid',String(missing));hint.hidden=!missing};
+   showAnswerHint();accepted.addEventListener('input',ev=>{q.accepted=ev.target.value.split(';').map(v=>v.trim()).filter(Boolean);showAnswerHint();changed()})
   }else if(type==='choice'||type==='multi'){
    const opts=Array.isArray(q.a)?q.a:[],multi=type==='multi';
    specific.innerHTML=`<div class="label">Варианты ответа${multi?' · отметьте все правильные':''}</div><div class="qOptions">${opts.map((v,i)=>`<div class="two">${multi?`<label class="field"><span><input type="checkbox" class="multiCorrect" data-i="${i}" ${Array.isArray(q.correct)&&q.correct.includes(i)?'checked':''}> Правильный ${i+1}</span><input class="option" data-i="${i}" type="text" aria-label="Вариант ${i+1}" value="${esc(v??'')}"></label>`:`<input class="option" data-i="${i}" type="text" aria-label="Вариант ${i+1}" value="${esc(v??'')}">`}<button type="button" class="iconBtn removeOption" data-i="${i}" aria-label="Удалить вариант ${i+1}" ${opts.length<=2?'disabled':''}>×</button></div>`).join('')}<button type="button" class="btn addOption">＋ Добавить вариант</button>${multi?'':'<label class="field"><span>Правильный вариант</span><select class="correct"></select></label>'}</div>`;
