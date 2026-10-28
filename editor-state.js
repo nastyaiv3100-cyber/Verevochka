@@ -102,6 +102,7 @@
   $('gameTitle').value=data.title;
   for(const key of ['startTitle','startText','cardLabel','loseTitle','winTitle','startButton','againButton','playAgainButtonText','accentA','accentB','ropeColor','textColor'])$(key).value=data[key];
   $('fontName').value=data.font;
+  $('showRopeItem').checked=data.showRopeItem!==false;
   for(const key of ['ropeWidth','fishSize','foodRotation','catSize','ropeHeroSize','ropeHeroOffsetX','ropeHeroOffsetY','jumpHeroSize','jumpHeroOffsetX','jumpHeroOffsetY','ropeLength','swingSpeed','swingAmount','lives'])$(key).value=key==='ropeLength'?Number(data[key])*100:data[key];
   for(const [key,id] of [['sound','soundStart'],['shuffleQuestions','shuffleQuestions'],['revealCorrect','revealCorrect'],['showTitlePage','showTitlePage'],['winImageEnabled','winImageEnabled'],['loseImageEnabled','loseImageEnabled'],['draftEnabled','draftEnabled'],['translateInterface','autoTranslateUI']])$(id).checked=!!data[key];
   $('cardWidth').value=data.cardWidth;$('cardHeight').value=data.cardHeight;

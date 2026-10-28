@@ -32,6 +32,8 @@ function buildGameFromConfig(c){let html=BASE_GAME;const t=c.theme;const rgba=(h
  html=html.replace(/const CELEBRATION_EFFECT = '(?:confetti|fireworks|hearts|none)';/,`const CELEBRATION_EFFECT = '${c.celebrationEffect||'confetti'}';`);
  const assetDefs={background:[/(background-image:url\(")([^"]*)("\);)/,originalAssets.background],food:[/(imgElem\.src\s*=\s*")([\s\S]*?)(";)/,originalAssets.food],ropeV:[/(ropeVertImg\.src\s*=\s*")([\s\S]*?)(";)/,originalAssets.ropeV],ropeH:[/(ropeHorizImg\.src\s*=\s*")([\s\S]*?)(";)/,originalAssets.ropeH],catStand:[/(const CHAR_STAND\s*=\s*")([\s\S]*?)(";)/,originalAssets.catStand],catJump:[/(const CHAR_FLY\s*=\s*")([\s\S]*?)(";)/,originalAssets.catJump],catEat:[/(const CHAR_EAT\s*=\s*")([\s\S]*?)(";)/,originalAssets.catEat]};
  for(const [key,[re,original]] of Object.entries(assetDefs)){const field=$(`asset-${key}`);const override= c.assetFiles[key]||c.assetOverrides[key]||field?.value.trim()||original;html=replaceStringAssignment(html,re,override)}
+ // Older projects keep the prize visible unless explicitly disabled.
+ html=html.replace('if(!STATE.eatenRopes.has(i)){',`if(${c.showRopeItem!==false} && !STATE.eatenRopes.has(i)){`);
  html=html.replace('// Сохраняем исходную ориентацию загруженного приза.',`ctx.rotate(${Math.max(-180,Math.min(180,Number(c.foodRotation)||0))} * Math.PI / 180);`);
  html=html.replace(/(function drawRope\(i\)\{[\s\S]*?const w = )\d+(;)/,`$1${c.ropeWidth}$2`).replace(/(function drawRope\(i\)\{[\s\S]*?const s = )\d+(;)/,`$1${c.fishSize}$2`);
  html=html.replace(/(S\.ropeLen = clamp\(Math\.floor\(S\.h \* )[\d.]+(\), 130, 220\);)/,`$1${c.ropeLength}$2`).replace(/(const amp\s*=\s*)[\d.]+;/,`$1${c.swingAmount};`).replace(/(const spd\s*=\s*)[\d.]+;/,`$1${c.swingSpeed};`);
